@@ -1,0 +1,11 @@
+name: aethetics-predictor
+dependencies:
+  - python >= 3.8
+  - numpy>=1.20
+  - click>=8.0
+  - pillow>=8.3.1
+  - pytorch>=1.11.0
+  - pandas>=1.5.2
+  pip:
+  - pytorch-lightning==1.4.2
+  - -e git+https://github.com/openai/CLIP.git@main#egg=clip
