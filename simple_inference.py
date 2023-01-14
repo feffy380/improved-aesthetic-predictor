@@ -1,4 +1,3 @@
-import webdataset as wds
 from PIL import Image
 import io
 import matplotlib.pyplot as plt
@@ -17,7 +16,6 @@ from torchvision import datasets, transforms
 import tqdm
 
 from os.path import join
-from datasets import load_dataset
 import pandas as pd
 from torch.utils.data import Dataset, DataLoader
 import json
