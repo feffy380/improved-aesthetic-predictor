@@ -1,23 +1,53 @@
-
-import numpy as np
-import torch
-import pytorch_lightning as pl
-import torch.nn as nn
-from PIL import Image
-import pandas as pd
-from MLP import MLP
-import clip
-
 import os
 
-@click.option('--directory',                    help='Image directory to evaluate',               type=str, required=True)
-@click.option('--model-path',                   help='Directory of model',                   type=str, required=True)
+import click
+import clip
+import pandas as pd
+import torch
+from PIL import Image
+from torch.utils.data import DataLoader, Dataset, default_collate
+from tqdm import tqdm
+
+from MLP import MLP
+
+Image.MAX_IMAGE_PIXELS = None
 
 
-@click.option('--out',                          help='CSV output with scores',                   type=str, default='scores')
-@click.option('--clip',                         help='Model used by clip to embed images',                    type=str, default='ViT-L/14', show_default=True)
-@click.option('--device',                       help='Torch device type (default uses cuda if avaliable)',    type=str, default='default', show_default=True)
-@click.option('--checkpoint',                   help='How often to save CSV',    type=int, default=100, show_default=True)
+def collate_discard_none(batch):
+    return default_collate([sample for sample in batch if sample is not None])
+
+
+class FolderDataset(Dataset):
+    def __init__(
+        self,
+        img_dir,
+        transform=None,
+    ):
+        self.img_dir = img_dir
+        self.img_list = [
+            img
+            for img in os.listdir(self.img_dir)
+            if os.path.splitext(img)[1] in (".jpg", ".png", ".gif")
+        ]
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.img_list)
+
+    def __getitem__(self, idx):
+        img_path = os.path.join(self.img_dir, self.img_list[idx])
+        try:
+            image = Image.open(img_path)
+        except Exception:
+            print(f"Couldn't load {img_path}")
+            return None
+        if self.transform:
+            try:
+                image = self.transform(image)
+            except Exception:
+                print(f"Couldn't load {img_path}")
+                return None
+        return img_path, image
 
 
 class dotdict(dict):
@@ -26,46 +56,68 @@ class dotdict(dict):
     __delattr__ = dict.__delitem__
 
 
-def normalized(a, axis=-1, order=2):
-    import numpy as np  # pylint: disable=import-outside-toplevel
-    l2 = np.atleast_1d(np.linalg.norm(a, order, axis))
-    l2[l2 == 0] = 1
-    return a / np.expand_dims(l2, axis)
-
-
+@click.command()
+@click.option(
+    "--directory", help="Image directory to evaluate", type=str, required=True
+)
+@click.option("--model", help="Directory of model", type=str, required=True)
+@click.option("--out", help="CSV output with scores", type=str, default="scores")
+@click.option(
+    "--clip",
+    help="Model used by clip to embed images",
+    type=str,
+    default="ViT-L/14",
+    show_default=True,
+)
+@click.option(
+    "--device",
+    help="Torch device type (default uses cuda if avaliable)",
+    type=str,
+    default="default",
+    show_default=True,
+)
 def main(**kwargs):
     opts = dotdict(kwargs)
     model = MLP(768)  # CLIP embedding dim is 768 for CLIP ViT L 14
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    if opts.device != 'default':
+    if opts.device != "default":
         device = opts.device
 
-    s = torch.load(opts.model_path)   # load the model you trained previously or the model available in this repo
+    s = torch.load(
+        opts.model
+    )  # load the model you trained previously or the model available in this repo
 
-    model.load_state_dict(s)
+    model.load_state_dict(s["state_dict"])
 
     model.to(device)
     model.eval()
 
+    clip_model, preprocess = clip.load(opts.clip, device=device)  # RN50x64
 
-    model2, preprocess = clip.load(opts.clip, device=device)  #RN50x64   
+    files = []
+    embeds = []
+    dataset = FolderDataset(img_dir=opts.directory, transform=preprocess)
+    with torch.no_grad():
+        for paths, images in tqdm(
+            DataLoader(
+                dataset, batch_size=64, collate_fn=collate_discard_none, num_workers=8
+            )
+        ):
+            features = clip_model.encode_image(images.to(device))
+            embeds.append(features)
+            files.extend(paths)
+    embeds = torch.cat(embeds)
+
     scores = []
-    count = 0
-    for file in os.listdir(opts.directory):
+    for path, embed in zip(files, embeds):
         with torch.no_grad():
-            pil_image = Image.open(file)
-            image = preprocess(pil_image).unsqueeze(0).to(device)
-            image_features = model2.encode_image(image)
-            im_emb_arr = normalized(image_features.cpu().detach().numpy() )
-            prediction = model(torch.from_numpy(im_emb_arr).to(device).type(torch.cuda.FloatTensor))
-            scores.append({'file':file, 'score':prediction.item()})
-            print("{0}: {1}".format( prediction.item() ))
-            if count % opts.checkpoint == 0:
-                df = pd.DataFrame(scores)
-                df.to_csv("{0}.csv".format(opts.out), index = False)
+            y_hat = model(embed.type(torch.float))
+            scores.append({"file": path, "score": y_hat.item()})
+            print(f"{path}: {y_hat.item()}")
 
     df = pd.DataFrame(scores)
-    df.to_csv("{0}.csv".format(opts.out), index = False)
+    df.to_csv(f"{opts.out}.csv", index=False)
+
 
 if __name__ == "__main__":
-   main()
+    main()

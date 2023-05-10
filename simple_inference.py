@@ -1,37 +1,15 @@
-from PIL import Image
-import io
-import matplotlib.pyplot as plt
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # choose GPU if you are on a multi GPU server
+import json
 import os
-import json
 
-from warnings import filterwarnings
-
-
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0"    # choose GPU if you are on a multi GPU server
-import numpy as np
-import torch
-import pytorch_lightning as pl
-import torch.nn as nn
-from torchvision import datasets, transforms
-import tqdm
-
-from os.path import join
-import pandas as pd
-from torch.utils.data import Dataset, DataLoader
-import json
-from MLP import MLP
+import click
 import clip
+import torch
+from PIL import Image
 
+from MLP import MLP
 
-from PIL import Image, ImageFile
-
-
-#####  This script will predict the aesthetic score for this image file:
-
-@click.option('--image',                  help='Image file to evaluate', metavar='[DIR]',                    type=str, required=True)
-@click.option('--model-path',             help='Directory of model', metavar='[DIR]',                    type=str, required=True)
-@click.option('--clip',                   help='Model used by clip to embed images',                    type=str, default='ViT-L/14', show_default=True)
-@click.option('--device',                 help='Torch device type (default uses cuda if avaliable)',    type=str, default='default', show_default=True)
+# This script will predict the aesthetic score for this image file:
 
 
 class dotdict(dict):
@@ -39,46 +17,68 @@ class dotdict(dict):
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
-def normalized(a, axis=-1, order=2):
-    import numpy as np  # pylint: disable=import-outside-toplevel
-    l2 = np.atleast_1d(np.linalg.norm(a, order, axis))
-    l2[l2 == 0] = 1
-    return a / np.expand_dims(l2, axis)
 
+@click.command()
+@click.option(
+    "--image", help="Image file to evaluate", metavar="[DIR]", type=str, required=True
+)
+@click.option(
+    "--model", help="Directory of model", metavar="[DIR]", type=str, required=True
+)
+@click.option(
+    "--clip",
+    help="Model used by clip to embed images",
+    type=str,
+    default="ViT-L/14",
+    show_default=True,
+)
+@click.option(
+    "--device",
+    help="Torch device type (default uses cuda if avaliable)",
+    type=str,
+    default="default",
+    show_default=True,
+)
 def main(**kwargs):
     opts = dotdict(kwargs)
-    model = MLP(768)  # CLIP embedding dim is 768 for CLIP ViT L 14
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    if opts.device != 'default':
+    if opts.device != "default":
         device = opts.device
 
-    s = torch.load(opts.model_path)   # load the model you trained previously or the model available in this repo
+    clip_model, preprocess = clip.load(opts.clip, device=device)  # RN50x64
+    dim = clip_model.visual.output_dim
 
-    model.load_state_dict(s)
-
+    model = MLP(dim)  # CLIP embedding dim is 768 for CLIP ViT L 14
+    sd = torch.load(opts.model)
+    if "state_dict" in sd:
+        sd = sd["state_dict"]
+    model.load_state_dict(sd)
     model.to(device)
     model.eval()
-
-
-    model2, preprocess = clip.load(opts.clip, device=device)  #RN50x64   
-
 
     pil_image = Image.open(opts.image)
 
     image = preprocess(pil_image).unsqueeze(0).to(device)
 
+    with torch.no_grad():
+        image_features = clip_model.encode_image(image)
 
+    im_emb_arr = image_features.type(torch.float)
 
     with torch.no_grad():
-        image_features = model2.encode_image(image)
+        prediction = model(im_emb_arr)
 
-    im_emb_arr = normalized(image_features.cpu().detach().numpy() )
-
-    prediction = model(torch.from_numpy(im_emb_arr).to(device).type(torch.cuda.FloatTensor))
-
-    print( "Aesthetic score predicted by the model:")
-    print( prediction )
+    try:
+        with open(os.path.splitext(opts.model)[0]+".json", "rt") as f:
+            y_stats = json.load(f)
+    except Exception:
+        y_stats = None
+    print("Aesthetic score predicted by the model:")
+    if y_stats is None:
+        print(prediction.item())
+    else:
+        print(prediction.item() * float(y_stats["std"]) + float(y_stats["mean"]))
 
 
 if __name__ == "__main__":
-   main()
+    main()
