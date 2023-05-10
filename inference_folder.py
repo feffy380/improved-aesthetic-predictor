@@ -78,21 +78,21 @@ class dotdict(dict):
 )
 def main(**kwargs):
     opts = dotdict(kwargs)
-    model = MLP(768)  # CLIP embedding dim is 768 for CLIP ViT L 14
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if opts.device != "default":
         device = opts.device
 
+    clip_model, preprocess = clip.load(opts.clip, device=device)  # RN50x64
+    dim = clip_model.visual.output_dim
+
+    model = MLP(dim)  # CLIP embedding dim is 768 for CLIP ViT L 14
     s = torch.load(
         opts.model
     )  # load the model you trained previously or the model available in this repo
 
-    model.load_state_dict(s["state_dict"])
-
+    model.load_state_dict(s.get("state_dict", s))
     model.to(device)
     model.eval()
-
-    clip_model, preprocess = clip.load(opts.clip, device=device)  # RN50x64
 
     files = []
     embeds = []
