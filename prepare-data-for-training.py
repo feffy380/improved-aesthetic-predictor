@@ -17,12 +17,6 @@ from tqdm import tqdm
 Image.MAX_IMAGE_PIXELS = None
 
 
-# def normalized(a, axis=-1, order=2):
-#     l2 = np.atleast_1d(np.linalg.norm(a, order, axis))
-#     l2[l2 == 0] = 1
-#     return a / np.expand_dims(l2, axis)
-
-
 class dotdict(dict):
     __getattr__ = dict.get
     __setattr__ = dict.__setitem__

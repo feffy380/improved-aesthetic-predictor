@@ -8,16 +8,14 @@ import torch
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from torch.utils.data import DataLoader, TensorDataset
 
-from MLP import ILModel, MLP
+import utils
+from MLP import MLP, ILModel
 
 
 class dotdict(dict):
     __getattr__ = dict.get
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
-
-
-# load the training data
 
 
 @click.command()
@@ -74,7 +72,7 @@ def main(**kwargs):
     # normalize ratings
     y_norm = (y - y.mean()) / y.std()
 
-    dataset = TensorDataset(torch.Tensor(x), torch.Tensor(y_norm))
+    dataset = utils.dataset_with_index(TensorDataset)(torch.Tensor(x), torch.Tensor(y_norm))
 
     # irreducible loss model
     train_dataset, val_dataset = torch.utils.data.random_split(
@@ -82,9 +80,6 @@ def main(**kwargs):
         [1 - opts.val_percent, opts.val_percent],
         torch.Generator().manual_seed(dataset_seed),
     )
-    print(len(val_dataset))
-    print(val_dataset[0][0].shape)
-    return
     train_loader = DataLoader(
         val_dataset,  # IL model trains on the validation set
         batch_size=opts.batch_size,
@@ -92,6 +87,7 @@ def main(**kwargs):
         num_workers=opts.num_workers,
         persistent_workers=True,
     )
+    return
     val_loader = DataLoader(
         train_dataset,
         batch_size=opts.batch_size,
