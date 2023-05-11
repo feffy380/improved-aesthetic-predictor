@@ -8,7 +8,7 @@ import torch
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from torch.utils.data import DataLoader, TensorDataset
 
-from MLP import MLP
+from MLP import ILModel, MLP
 
 
 class dotdict(dict):
@@ -58,7 +58,9 @@ class dotdict(dict):
 def main(**kwargs):
     opts = dotdict(kwargs)
 
+    # ensure fixed seed for reproducible DataLoader order for RHO-Loss
     pl.seed_everything(opts.seed, workers=True)
+    dataset_seed = torch.randint(0, 2**32 - 1, (1,)).item()
 
     # if opts.device == "default" and torch.cuda.is_available():
     #     torch.set_float32_matmul_precision("high")
@@ -71,12 +73,53 @@ def main(**kwargs):
         )
     # normalize ratings
     y_norm = (y - y.mean()) / y.std()
-    mean = y_norm.mean()
-    print(np.mean(np.square(y_norm - mean)))
 
     dataset = TensorDataset(torch.Tensor(x), torch.Tensor(y_norm))
+
+    # irreducible loss model
     train_dataset, val_dataset = torch.utils.data.random_split(
-        dataset, [1 - opts.val_percent, opts.val_percent]
+        dataset,
+        [1 - opts.val_percent, opts.val_percent],
+        torch.Generator().manual_seed(dataset_seed),
+    )
+    print(len(val_dataset))
+    print(val_dataset[0][0].shape)
+    return
+    train_loader = DataLoader(
+        val_dataset,  # IL model trains on the validation set
+        batch_size=opts.batch_size,
+        shuffle=True,
+        num_workers=opts.num_workers,
+        persistent_workers=True,
+    )
+    val_loader = DataLoader(
+        train_dataset,
+        batch_size=opts.batch_size,
+        num_workers=opts.num_workers,
+        persistent_workers=True,
+    )
+
+    ilmodel = MLP(x.shape[1], opts.learning_rate)  # input size = embedding length
+    trainer = pl.Trainer(
+        max_epochs=opts.epochs,
+        callbacks=[
+            EarlyStopping(monitor="val_loss", patience=10, mode="min"),
+            ModelCheckpoint(
+                monitor="val_loss",
+                dirpath="models",
+                filename=opts.out,
+                save_weights_only=True,
+                verbose=True,
+            ),
+        ],
+    )
+    trainer.fit(ilmodel, train_loader, val_loader)
+
+    # reducible loss model
+    train_dataset, val_dataset = torch.utils.data.random_split(
+        dataset,
+        [1 - opts.val_percent, opts.val_percent],
+        torch.Generator().manual_seed(dataset_seed),
     )
     train_loader = DataLoader(
         train_dataset,
