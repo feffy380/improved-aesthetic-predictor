@@ -21,6 +21,7 @@ class dotdict(dict):
 
 
 @click.command()
+@click.option("--epochs", help="Number of epochs", type=int, default=-1)
 @click.option("--out", help="Output file of model", type=str, required=True)
 @click.option("--learning-rate", help="Learning Rate", type=float, default=1e-3)
 @click.option(
@@ -96,7 +97,7 @@ def main(**kwargs):
     trainer = pl.Trainer(
         max_epochs=opts.epochs,
         callbacks=[
-            EarlyStopping(monitor="val_loss", patience=10, mode="min"),
+            EarlyStopping(monitor="val_loss", patience=20, mode="min"),
             ModelCheckpoint(
                 monitor="val_loss",
                 dirpath="models",
