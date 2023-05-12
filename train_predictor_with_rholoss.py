@@ -27,7 +27,7 @@ class dotdict(dict):
     "--val-percent",
     help="Percent of embeddings to use for validation",
     type=float,
-    default=0.1,
+    default=0.05,
 )
 @click.option(
     "--select-factor",
@@ -129,6 +129,7 @@ def main(**kwargs):
         trainer.checkpoint_callback.best_model_path, input_size=x.shape[1]
     )
     ilmodel.to(opts.device)
+    ilmodel.eval()
 
     print("Precomputing irreducible losses")
     irreducible_loss = utils.compute_losses(
