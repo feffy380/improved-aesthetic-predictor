@@ -9,7 +9,6 @@ import clip
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn.functional as F
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset, default_collate
 from tqdm import tqdm
@@ -164,24 +163,15 @@ def main(**kwargs):
             x.append(features)
             y.append(ratings)
     post_ids = torch.cat(post_ids).cpu().numpy()
-    x = torch.cat(x)
-    x_fnorm = F.normalize(x, dim=-1).cpu().numpy()
-    x = x.cpu().numpy()
-    # x_norm = [normalized(xi) for xi in x]
+    x = torch.cat(x).cpu().numpy()
     y = torch.cat(y).cpu().numpy()
     x = np.vstack(x)
-    # x_norm = np.vstack(x_norm)
-    x_fnorm = np.vstack(x_fnorm)
     y = np.vstack(y)
     print(post_ids.shape)
     print(x.shape)
-    # print(x_norm.shape)
-    print(x_fnorm.shape)
     print(y.shape)
     np.save(f"{opts.out}/ids_{os.path.splitext(opts.score_file)[0]}.npy", post_ids)
     np.save(f"{opts.out}/{opts.embeddings_name}.npy", x)
-    # np.save(f"{opts.out}/{opts.embeddings_name}_norm.npy", x_norm)
-    np.save(f"{opts.out}/{opts.embeddings_name}_fnorm.npy", x_fnorm)
     np.save(f"{opts.out}/{opts.score_name}.npy", y)
 
 

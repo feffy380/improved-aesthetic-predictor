@@ -3,8 +3,8 @@ import sys
 
 import pandas as pd
 
-# Load the parquet file into a pandas DataFrame
-df = pd.read_parquet(sys.argv[1])
+# Load the file into a pandas DataFrame
+df = pd.read_csv(sys.argv[1])
 # Build a dictionary with the "id" column as the key and "fav_count" as the value
 id_to_score = dict(zip(df["id"], df["fav_count"]))
 # Loop over all the directories specified on the command line
