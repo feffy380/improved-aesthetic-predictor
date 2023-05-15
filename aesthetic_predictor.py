@@ -54,7 +54,7 @@ class AestheticPredictor:
         images = torch.vstack(
             [self.transform(img).unsqueeze(0).to(self.device) for img in images]
         )
-        with torch.no_grad():
+        with torch.inference_mode():
             features = self.clip_model.encode_image(images).type(torch.float)
             prediction = self.model(features)
         return prediction.squeeze(-1).tolist()

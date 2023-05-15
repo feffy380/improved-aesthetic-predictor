@@ -60,12 +60,12 @@ def main(**kwargs):
 
     image = preprocess(pil_image).unsqueeze(0).to(device)
 
-    with torch.no_grad():
+    with torch.inference_mode():
         image_features = clip_model.encode_image(image)
 
     im_emb_arr = image_features.type(torch.float)
 
-    with torch.no_grad():
+    with torch.inference_mode():
         prediction = model(im_emb_arr)
 
     try:

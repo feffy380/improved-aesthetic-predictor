@@ -97,7 +97,7 @@ def main(**kwargs):
     files = []
     embeds = []
     dataset = FolderDataset(img_dir=opts.directory, transform=preprocess)
-    with torch.no_grad():
+    with torch.inference_mode():
         for paths, images in tqdm(
             DataLoader(
                 dataset, batch_size=64, collate_fn=collate_discard_none, num_workers=8
@@ -110,7 +110,7 @@ def main(**kwargs):
 
     scores = []
     for path, embed in zip(files, embeds):
-        with torch.no_grad():
+        with torch.inference_mode():
             y_hat = model(embed.type(torch.float))
             scores.append({"file": path, "score": y_hat.item()})
             print(f"{path}: {y_hat.item()}")
