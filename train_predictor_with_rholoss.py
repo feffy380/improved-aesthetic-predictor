@@ -62,6 +62,11 @@ class dotdict(dict):
     help="random seed",
     type=int,
 )
+@click.option(
+    "--raw-scores",
+    help="Use raw scores instead of normalizing them",
+    is_flag=True
+)
 def main(**kwargs):
     opts = dotdict(kwargs)
 
@@ -81,7 +86,9 @@ def main(**kwargs):
             f"Embedding and score file lengths don't match: {len(x)} vs {len(y)}"
         )
     # normalize ratings
-    y_norm = (y - y.mean()) / y.std()
+    y_norm = y
+    if not opts.raw_scores:
+        y_norm = (y - y.mean()) / y.std()
 
     dataset = utils.dataset_with_index(TensorDataset)(
         torch.Tensor(x), torch.Tensor(y_norm)
@@ -185,8 +192,9 @@ def main(**kwargs):
     print(y_hat)
     print(y_target)
     # rating mean and stddev in case we want to recover unstandardized ratings
-    with open(f"models/{opts.out}.json", "wt") as f:
-        json.dump({"mean": str(y.mean()), "std": str(y.std())}, f)
+    if not opts.raw_scores:
+        with open(f"models/{opts.out}.json", "wt") as f:
+            json.dump({"mean": str(y.mean()), "std": str(y.std())}, f)
 
 
 if __name__ == "__main__":
