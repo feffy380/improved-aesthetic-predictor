@@ -45,6 +45,7 @@ class ImageDataset(Dataset):
         score_col="SCORE",
         transform=None,
         target_transform=None,
+        flip: bool = False,
     ):
         self.img_ratings = img_ratings
         self.id_col = id_col
@@ -52,11 +53,19 @@ class ImageDataset(Dataset):
         self.score_col = score_col
         self.transform = transform
         self.target_transform = target_transform
+        self.flip = flip
 
     def __len__(self):
-        return len(self.img_ratings)
+        n = len(self.img_ratings)
+        if self.flip:
+            n *= 2
+        return n
 
     def __getitem__(self, idx):
+        flipped = False
+        if self.flip:
+            flipped = idx % 2 == 1
+            idx = idx // 2
         post_id = self.img_ratings[self.id_col].iloc[idx]
         img_path = self.img_ratings[self.img_col].iloc[idx]
         try:
@@ -64,6 +73,8 @@ class ImageDataset(Dataset):
         except Exception:
             print(f"Couldn't load {img_path}")
             return None
+        if flipped:
+            image = image.transpose(method=Image.Transpose.FLIP_LEFT_RIGHT)
         rating = float(self.img_ratings[self.score_col].iloc[idx])
         if self.transform:
             try:
@@ -130,6 +141,11 @@ class ImageDataset(Dataset):
 @click.option(
     "--out", help="Output directory", metavar="DIR", type=str, default="embeddings"
 )
+@click.option(
+    "--flip-aug",
+    help="Augment data by encoding horizontally flipped versions of images",
+    is_flag=True,
+)
 def main(**kwargs):
     opts = dotdict(kwargs)
     outExists = os.path.exists(opts.out)
@@ -138,15 +154,17 @@ def main(**kwargs):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if opts.device != "default":
         device = opts.device
+    basename = os.path.basename(opts.score_file)
+    basename = os.path.splitext(basename)[0]
     if not opts.embeddings_name:
-        opts.embeddings_name = f"x_{os.path.splitext(opts.score_file)[0]}_embeddings"
+        opts.embeddings_name = f"x_{basename}_embeddings"
     if not opts.score_name:
-        opts.score_name = f"y_{os.path.splitext(opts.score_file)[0]}_ratings"
+        opts.score_name = f"y_{basename}_ratings"
 
     model, preprocess = clip.load(opts.clip, device=device)
 
     df = load_df(opts.score_file_type, opts.score_file)
-    dataset = ImageDataset(img_ratings=df, transform=preprocess)
+    dataset = ImageDataset(img_ratings=df, transform=preprocess, flip=opts.flip_aug)
 
     post_ids = []
     x = []
@@ -170,7 +188,7 @@ def main(**kwargs):
     print(post_ids.shape)
     print(x.shape)
     print(y.shape)
-    np.save(f"{opts.out}/ids_{os.path.splitext(opts.score_file)[0]}.npy", post_ids)
+    np.save(f"{opts.out}/ids_{basename}.npy", post_ids)
     np.save(f"{opts.out}/{opts.embeddings_name}.npy", x)
     np.save(f"{opts.out}/{opts.score_name}.npy", y)
 

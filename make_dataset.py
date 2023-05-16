@@ -17,7 +17,7 @@ for directory in sys.argv[2:]:
     for filename in os.listdir(directory):
         # Get the post_id, which is the filename without the extension
         post_id, ext = os.path.splitext(filename)
-        if ext not in (".png", ".jpg", ".gif"):
+        if ext not in (".png", ".jpg", ".gif", ".webp"):
             continue
         post_id = int(post_id)
         # Look up the score in the dictionary

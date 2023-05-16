@@ -121,7 +121,7 @@ def main(**kwargs):
         EarlyStopping(monitor="val_loss", patience=patience, mode="min"),
         ModelCheckpoint(
             monitor="val_loss",
-            dirpath="models",
+            dirpath="models/rhoLoss-il",
             filename=f"il-{opts.out}",
             save_weights_only=True,
             verbose=True,
@@ -184,8 +184,8 @@ def main(**kwargs):
     trainer.fit(model, train_loader, val_loader)
     print("training done")
 
-    # inference test with dummy samples from the val set, sanity check
-    print("inference test with dummy samples from the val set, sanity check")
+    # inference test sanity check
+    print("inference test sanity check")
     model.eval()
     y_hat = model(torch.Tensor(x[:10]))
     y_target = y_norm[:10]
