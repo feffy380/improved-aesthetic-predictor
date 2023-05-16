@@ -4,4 +4,4 @@ pillow
 #torch
 pandas
 pytorch-lightning
-clip @ git+https://github.com/openai/CLIP
+transformers

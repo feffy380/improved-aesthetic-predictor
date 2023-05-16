@@ -10,7 +10,7 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from torch.utils.data import DataLoader, TensorDataset
 
 import utils
-from MLP import RLossModel, ILModel
+from MLP import ILModel, RLossModel
 
 
 class dotdict(dict):
@@ -63,9 +63,7 @@ class dotdict(dict):
     type=int,
 )
 @click.option(
-    "--raw-scores",
-    help="Use raw scores instead of normalizing them",
-    is_flag=True
+    "--raw-scores", help="Use raw scores instead of normalizing them", is_flag=True
 )
 def main(**kwargs):
     opts = dotdict(kwargs)
@@ -139,9 +137,7 @@ def main(**kwargs):
     ilmodel.eval()
 
     print("Precomputing irreducible losses")
-    irreducible_loss = utils.compute_losses(
-        dataloader=val_loader, model=ilmodel
-    )
+    irreducible_loss = utils.compute_losses(dataloader=val_loader, model=ilmodel)
 
     print("Training reducible loss model")
     model = RLossModel(

@@ -1,12 +1,12 @@
 import os
 
 import click
-import clip
 import pandas as pd
 import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset, default_collate
 from tqdm import tqdm
+from transformers import AutoProcessor, CLIPModel
 
 from MLP import MLP
 
@@ -43,7 +43,9 @@ class FolderDataset(Dataset):
             return None
         if self.transform:
             try:
-                image = self.transform(image)
+                image = self.transform(images=image, return_tensors="pt")[
+                    "pixel_values"
+                ].squeeze(0)
             except Exception:
                 print(f"Couldn't load {img_path}")
                 return None
@@ -64,9 +66,9 @@ class dotdict(dict):
 @click.option("--out", help="CSV output with scores", type=str, default="scores")
 @click.option(
     "--clip",
-    help="Model used by clip to embed images",
+    help="Huggingface model used by clip to embed images",
     type=str,
-    default="ViT-L/14",
+    default="openai/clip-vit-large-patch14",
     show_default=True,
 )
 @click.option(
@@ -82,8 +84,9 @@ def main(**kwargs):
     if opts.device != "default":
         device = opts.device
 
-    clip_model, preprocess = clip.load(opts.clip, device=device)  # RN50x64
-    dim = clip_model.visual.output_dim
+    clip_model = CLIPModel.from_pretrained(opts.clip).to(device)
+    preprocess = AutoProcessor.from_pretrained(opts.clip)
+    dim = clip_model.projection_dim
 
     model = MLP(dim)  # CLIP embedding dim is 768 for CLIP ViT L 14
     s = torch.load(
@@ -103,7 +106,7 @@ def main(**kwargs):
                 dataset, batch_size=64, collate_fn=collate_discard_none, num_workers=8
             )
         ):
-            features = clip_model.encode_image(images.to(device))
+            features = clip_model.get_image_features(images.to(device))
             embeds.append(features)
             files.extend(paths)
     embeds = torch.cat(embeds)

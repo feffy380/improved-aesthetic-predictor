@@ -5,13 +5,13 @@
 import os
 
 import click
-import clip
 import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset, default_collate
 from tqdm import tqdm
+from transformers import AutoProcessor, CLIPModel
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -78,7 +78,9 @@ class ImageDataset(Dataset):
         rating = float(self.img_ratings[self.score_col].iloc[idx])
         if self.transform:
             try:
-                image = self.transform(image)
+                image = self.transform(images=image, return_tensors="pt")[
+                    "pixel_values"
+                ].squeeze(0)
             except Exception:
                 print(f"Couldn't load {img_path}")
                 return None
@@ -133,9 +135,9 @@ class ImageDataset(Dataset):
 )
 @click.option(
     "--clip",
-    help="Model used by clip to embed images",
+    help="Huggingface model used by clip to embed images",
     type=str,
-    default="ViT-L/14",
+    default="openai/clip-vit-large-patch14",
     show_default=True,
 )
 @click.option(
@@ -161,7 +163,8 @@ def main(**kwargs):
     if not opts.score_name:
         opts.score_name = f"y_{basename}_ratings"
 
-    model, preprocess = clip.load(opts.clip, device=device)
+    model = CLIPModel.from_pretrained(opts.clip).to(device)
+    preprocess = AutoProcessor.from_pretrained(opts.clip)
 
     df = load_df(opts.score_file_type, opts.score_file)
     dataset = ImageDataset(img_ratings=df, transform=preprocess, flip=opts.flip_aug)
@@ -170,13 +173,13 @@ def main(**kwargs):
     x = []
     y = []
 
-    with torch.no_grad():
+    with torch.inference_mode():
         for ids, images, ratings in tqdm(
             DataLoader(
                 dataset, batch_size=64, collate_fn=collate_discard_none, num_workers=8
             )
         ):
-            features = model.encode_image(images.to(device))
+            features = model.get_image_features(images.to(device))
             post_ids.append(ids)
             x.append(features)
             y.append(ratings)

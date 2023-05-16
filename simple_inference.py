@@ -3,13 +3,15 @@ import json
 import os
 
 import click
-import clip
 import torch
 from PIL import Image
+from transformers import AutoProcessor, CLIPModel, logging
 
 from MLP import MLP
 
-# This script will predict the aesthetic score for this image file:
+logging.set_verbosity_error()
+
+# This script will predict the aesthetic score for the given image file
 
 
 class dotdict(dict):
@@ -27,9 +29,9 @@ class dotdict(dict):
 )
 @click.option(
     "--clip",
-    help="Model used by clip to embed images",
+    help="Huggingface model used by clip to embed images",
     type=str,
-    default="ViT-L/14",
+    default="openai/clip-vit-large-patch14",
     show_default=True,
 )
 @click.option(
@@ -45,8 +47,9 @@ def main(**kwargs):
     if opts.device != "default":
         device = opts.device
 
-    clip_model, preprocess = clip.load(opts.clip, device=device)  # RN50x64
-    dim = clip_model.visual.output_dim
+    clip_model = CLIPModel.from_pretrained(opts.clip).to(device)
+    preprocess = AutoProcessor.from_pretrained(opts.clip)
+    dim = clip_model.projection_dim
 
     model = MLP(dim)  # CLIP embedding dim is 768 for CLIP ViT L 14
     sd = torch.load(opts.model)
@@ -58,10 +61,10 @@ def main(**kwargs):
 
     pil_image = Image.open(opts.image)
 
-    image = preprocess(pil_image).unsqueeze(0).to(device)
+    image = preprocess(images=pil_image, return_tensors="pt")["pixel_values"].to(device)
 
     with torch.inference_mode():
-        image_features = clip_model.encode_image(image)
+        image_features = clip_model.get_image_features(image)
 
     im_emb_arr = image_features.type(torch.float)
 
@@ -69,7 +72,7 @@ def main(**kwargs):
         prediction = model(im_emb_arr)
 
     try:
-        with open(os.path.splitext(opts.model)[0]+".json", "rt") as f:
+        with open(os.path.splitext(opts.model)[0] + ".json", "rt") as f:
             y_stats = json.load(f)
     except Exception:
         y_stats = None

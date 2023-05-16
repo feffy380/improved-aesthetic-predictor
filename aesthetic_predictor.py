@@ -1,6 +1,6 @@
-import clip
 import torch
 from torch import nn
+from transformers import AutoProcessor, CLIPModel
 
 
 class MLP(nn.Module):
@@ -27,13 +27,16 @@ class MLP(nn.Module):
 
 
 class AestheticPredictor:
-    def __init__(self, model_path, clip_model="ViT-L/14", device="default"):
+    def __init__(
+        self, model_path, clip_model="openai/clip-vit-large-patch14", device="default"
+    ):
         self.device = device
         if self.device == "default":
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
         # load clip
-        self.clip_model, self.transform = clip.load(clip_model, device=self.device)
-        dim = self.clip_model.visual.output_dim
+        self.clip_model = CLIPModel.from_pretrained(clip_model).to(self.device)
+        self.transform = AutoProcessor.from_pretrained(clip_model)
+        dim = self.clip_model.projection_dim
         # load model
         self.model = MLP(dim)
         state_dict = torch.load(model_path)
@@ -52,9 +55,14 @@ class AestheticPredictor:
             list of aesthetic scores
         """
         images = torch.vstack(
-            [self.transform(img).unsqueeze(0).to(self.device) for img in images]
+            [
+                self.transform(images=img, return_tensors="pt")["pixel_values"].to(
+                    self.device
+                )
+                for img in images
+            ]
         )
         with torch.inference_mode():
-            features = self.clip_model.encode_image(images).type(torch.float)
+            features = self.clip_model.get_image_features(images)
             prediction = self.model(features)
         return prediction.squeeze(-1).tolist()
