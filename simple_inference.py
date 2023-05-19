@@ -41,6 +41,11 @@ class dotdict(dict):
     default="default",
     show_default=True,
 )
+@click.option(
+    "--raw",
+    help="Return raw model outputs",
+    is_flag=True,
+)
 def main(**kwargs):
     opts = dotdict(kwargs)
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -77,7 +82,7 @@ def main(**kwargs):
     except Exception:
         y_stats = None
     print("Aesthetic score predicted by the model:")
-    if y_stats is None:
+    if y_stats is None or opts.raw:
         print(prediction.item())
     else:
         print(prediction.item() * float(y_stats["std"]) + float(y_stats["mean"]))

@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from transformers import AutoProcessor, CLIPModel
+from transformers import AutoProcessor, CLIPVisionModelWithProjection
 
 
 class MLP(nn.Module):
@@ -34,9 +34,9 @@ class AestheticPredictor:
         if self.device == "default":
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
         # load clip
-        self.clip_model = CLIPModel.from_pretrained(clip_model).to(self.device)
+        self.clip_model = CLIPVisionModelWithProjection.from_pretrained(clip_model).to(self.device)
         self.transform = AutoProcessor.from_pretrained(clip_model)
-        dim = self.clip_model.projection_dim
+        dim = self.clip_model.config.projection_dim
         # load model
         self.model = MLP(dim)
         state_dict = torch.load(model_path)
@@ -63,6 +63,6 @@ class AestheticPredictor:
             ]
         )
         with torch.inference_mode():
-            features = self.clip_model.get_image_features(images)
+            features = self.clip_model(images).image_embeds
             prediction = self.model(features)
-        return prediction.squeeze(-1).tolist()
+        return prediction.squeeze(dim=-1).tolist()
