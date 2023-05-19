@@ -1,8 +1,6 @@
 import torch
 from torch import nn
-from transformers import AutoProcessor, CLIPVisionModelWithProjection, logging
-
-logging.set_verbosity_error()
+from transformers import AutoProcessor, CLIPVisionModelWithProjection
 
 
 class MLP(nn.Module):
