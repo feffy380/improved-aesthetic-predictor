@@ -3,6 +3,9 @@ from torch import nn
 from transformers import AutoProcessor, CLIPVisionModelWithProjection
 
 
+model_cache_ = dict()
+
+
 class MLP(nn.Module):
     def __init__(self, input_size):
         super().__init__()
@@ -34,10 +37,14 @@ class AestheticPredictor:
         if self.device == "default":
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
         # load clip
-        self.clip_model = CLIPVisionModelWithProjection.from_pretrained(clip_model).to(
-            self.device
-        )
-        self.transform = AutoProcessor.from_pretrained(clip_model)
+        if clip_model in model_cache_:
+            self.clip_model, self.transform = model_cache_[clip_model]
+        else:
+            self.clip_model = CLIPVisionModelWithProjection.from_pretrained(clip_model).to(
+                self.device
+            )
+            self.transform = AutoProcessor.from_pretrained(clip_model)
+            model_cache_[clip_model] = (self.clip_model, self.transform)
         dim = self.clip_model.config.projection_dim
         # load model
         self.model = MLP(dim)
@@ -47,14 +54,33 @@ class AestheticPredictor:
         self.model.to(self.device)
         self.model.eval()
 
-    def predict(self, images):
+    def predict(self, images=None, embeds=None):
         """
         Predict aesthetic scores.
+
+        Args (images or embeds but not both):
+            images: (optional) iterable of PIL Image
+            embeds: (optional) embeddings returned by the get_embeds method
+        Returns:
+            list of aesthetic scores
+        """
+        if (images is None and embeds is None) or (images is not None and embeds is not None):
+            raise ValueError("exactly one of images or embeds required")
+
+        if images is not None:
+            embeds = self.get_embeds(images)
+        with torch.inference_mode():
+            prediction = self.model(embeds)
+        return prediction.squeeze(dim=-1).tolist()
+
+    def get_embeds(self, images):
+        """
+        Get CLIP embeddings for a set of images. Useful for passing to multiple models.
 
         Args:
             images: iterable of PIL Image
         Returns:
-            list of aesthetic scores
+            torch.Tensor of CLIP embeddings
         """
         images = torch.vstack(
             [
@@ -65,6 +91,5 @@ class AestheticPredictor:
             ]
         )
         with torch.inference_mode():
-            features = self.clip_model(images).image_embeds
-            prediction = self.model(features)
-        return prediction.squeeze(dim=-1).tolist()
+            embeds = self.clip_model(images).image_embeds
+        return embeds
