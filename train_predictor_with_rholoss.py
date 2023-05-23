@@ -65,6 +65,11 @@ class dotdict(dict):
 @click.option(
     "--raw-scores", help="Use raw scores instead of normalizing them", is_flag=True
 )
+@click.option(
+    "--binary",
+    help="Treat problem as binary classification. Use BCEWithLogitsLoss instead of MSE",
+    is_flag=True,
+)
 def main(**kwargs):
     opts = dotdict(kwargs)
 
@@ -85,7 +90,7 @@ def main(**kwargs):
         )
     # normalize ratings
     y_norm = y
-    if not opts.raw_scores:
+    if not opts.raw_scores and not opts.binary:
         y_norm = (y - y.mean()) / y.std()
 
     dataset = utils.dataset_with_index(TensorDataset)(
@@ -113,8 +118,8 @@ def main(**kwargs):
         persistent_workers=True,
     )
 
-    ilmodel = ILModel(x.shape[1], opts.learning_rate)  # input size = embedding length
-    patience = 20
+    ilmodel = ILModel(x.shape[1], lr=opts.learning_rate, binary=opts.binary)
+    patience = 16
     callbacks = [
         EarlyStopping(monitor="val_loss", patience=patience, mode="min"),
         ModelCheckpoint(
@@ -148,7 +153,8 @@ def main(**kwargs):
             irreducible_loss=irreducible_loss,
             select_factor=opts.select_factor,
         ),
-    )  # input size = embedding length
+        binary=opts.binary,
+    )
 
     train_loader = DataLoader(
         train_dataset,
@@ -188,7 +194,7 @@ def main(**kwargs):
     print(y_hat)
     print(y_target)
     # rating mean and stddev in case we want to recover unstandardized ratings
-    if not opts.raw_scores:
+    if not opts.raw_scores and not opts.binary:
         with open(f"models/{opts.out}.json", "wt") as f:
             json.dump({"mean": str(y.mean()), "std": str(y.std())}, f)
 

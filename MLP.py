@@ -5,10 +5,11 @@ from torch import nn
 
 
 class MLP(pl.LightningModule):
-    def __init__(self, input_size, lr=1e-3):
+    def __init__(self, input_size, lr=1e-3, binary=False):
         super().__init__()
         self.input_size = input_size
         self.lr = lr
+        self.loss_function = F.binary_cross_entropy_with_logits if binary else F.mse_loss
         self.layers = nn.Sequential(
             nn.Linear(self.input_size, 1024),
             nn.ReLU(),
@@ -31,7 +32,7 @@ class MLP(pl.LightningModule):
         x = batch[0]
         y = batch[1].reshape(-1, 1)
         x_hat = self.layers(x)
-        loss = F.mse_loss(x_hat, y)
+        loss = self.loss_function(x_hat, y)
         return loss
 
     def training_step(self, batch, batch_idx):
@@ -49,7 +50,7 @@ class MLP(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer=optimizer, patience=10, factor=0.1, verbose=True
+            optimizer=optimizer, patience=8, factor=0.1, verbose=True
         )
         return {
             "optimizer": optimizer,
@@ -73,8 +74,8 @@ class RLossModel(MLP):
     Reducible loss model for RHO-Loss
     """
 
-    def __init__(self, input_size, lr=1e-3, selection_method=None):
-        super().__init__(input_size, lr)
+    def __init__(self, input_size, selection_method=None, **kwargs):
+        super().__init__(input_size, **kwargs)
         self.selection_method = selection_method
 
     def compute_loss(self, batch):
@@ -83,6 +84,6 @@ class RLossModel(MLP):
         return loss
 
     def training_step(self, batch, batch_idx):
-        batch = self.selection_method(batch=batch, model=self, loss_function=F.mse_loss)
+        batch = self.selection_method(batch=batch, model=self, loss_function=self.loss_function)
         loss = super().training_step(batch, batch_idx)
         return loss
